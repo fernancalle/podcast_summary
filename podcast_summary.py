@@ -20,25 +20,7 @@ FRAME_RATE = 16000
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# DAG configuration
-@dag(
-    dag_id='podcast_summary',
-    schedule_interval="@daily",
-    start_date=days_ago(1),
-    catchup=False,
-)
-def podcast_summary():
-    start_task = DummyOperator(task_id='start')
-    create_database = create_database_task()
-    podcast_episodes = get_podcast_episodes_task()
-    new_episodes = load_new_episodes_task(podcast_episodes)
-    processed_episodes = process_audio_and_generate_transcripts(new_episodes)
-    filtered_episodes = filter_episodes(processed_episodes, criteria={})  # Define criteria here
-    end_task = DummyOperator(task_id='end')
-
-    start_task >> create_database >> podcast_episodes >> new_episodes >> processed_episodes >> filtered_episodes >> end_task
-
-# Task to create database
+# Function to create the SQLite database
 def create_database_task():
     sql_command = '''
     CREATE TABLE IF NOT EXISTS episodes (
@@ -56,24 +38,16 @@ def create_database_task():
         sqlite_conn_id="podcasts"
     )
 
-# Task to get podcast episodes
+# Function to get podcast episodes
 @task()
 def get_podcast_episodes_task():
-    try:
-        response = requests.get(PODCAST_URL)
-        response.raise_for_status()  # Raises an HTTPError for bad requests
-        feed = xmltodict.parse(response.text)
-        episodes = feed["rss"]["channel"]["item"]
-        logging.info(f"Found {len(episodes)} episodes.")
-        return episodes
-    except requests.HTTPError as e:
-        logging.error(f"HTTP Error: {e}")
-        return []
-    except Exception as e:
-        logging.error(f"Unexpected Error: {e}")
-        return []
+    response = requests.get(PODCAST_URL)
+    feed = xmltodict.parse(response.text)
+    episodes = feed["rss"]["channel"]["item"]
+    logging.info(f"Found {len(episodes)} episodes.")
+    return episodes
 
-# Task to load new episodes into the database
+# Function to load new episodes into the database
 @task()
 def load_new_episodes_task(episodes):
     hook = SqliteHook(sqlite_conn_id="podcasts")
@@ -103,7 +77,7 @@ def load_new_episodes_task(episodes):
 
     return new_episodes
 
-# Function to process audio files and generate transcripts (example of added functionality)
+# Function to process audio files and generate transcripts
 @task()
 def process_audio_and_generate_transcripts(episodes):
     model = Model("model_path")  # Path to the vosk model directory
@@ -133,3 +107,39 @@ def update_transcript_in_database(episode_link, transcript):
     update_query = "UPDATE episodes SET transcript = ? WHERE link = ?"
     hook = SqliteHook(sqlite_conn_id="podcasts")
     hook.run(update_query, parameters=(transcript, episode_link))
+
+# Function to filter episodes based on additional criteria
+@task()
+def filter_episodes(episodes, criteria):
+    # Implement filtering logic based on the criteria
+    # Example: Filter episodes by date range or keywords in the title
+    filtered_episodes = [episode for episode in episodes if meets_criteria(episode, criteria)]
+    return filtered_episodes
+
+# Helper function to check if an episode meets the given criteria
+def meets_criteria(episode, criteria):
+    # Implement the logic to check if the episode meets the criteria
+    # Example: Check if the episode's title contains specific keywords
+    return True  # Placeholder logic
+
+# DAG configuration
+@dag(
+    dag_id='podcast_summary',
+    default_args={
+        'owner': 'airflow',
+        'start_date': days_ago(1)
+    },
+    catchup=False
+)
+def podcast_summary():
+    start_task = DummyOperator(task_id='start')
+    create_database = create_database_task()
+    podcast_episodes = get_podcast_episodes_task()
+    new_episodes = load_new_episodes_task(podcast_episodes)
+    processed_episodes = process_audio_and_generate_transcripts(new_episodes)
+    filtered_episodes = filter_episodes(processed_episodes, criteria={})
+    
+    start_task >> create_database >> podcast_episodes >> new_episodes >> processed_episodes >> filtered_episodes
+
+# Main execution
+podcast_summary_dag = podcast_summary()
