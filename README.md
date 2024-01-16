@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Podcast Transcription Pipeline Project is an advanced implementation using Apache Airflow to automate the process of downloading, transcribing, and storing podcast episodes in a SQLite database. This project showcases the practical application of Airflow in managing complex data workflows.
+The Podcast Transcription Pipeline Project is a simple implementation using Apache Airflow to automate the process of downloading, transcribing, and storing podcast episodes in a SQLite database. This project showcases the practical application of Airflow in managing complex data workflows.
 
 ## Project Objectives
 
